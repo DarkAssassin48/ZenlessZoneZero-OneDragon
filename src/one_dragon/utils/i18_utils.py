@@ -55,6 +55,7 @@ def detect_and_set_default_language():
     """
     return update_default_lang(detect_language())
 
+
 def get_translations(model: str, lang: str):
     """
     加载语言
@@ -82,6 +83,27 @@ def get_translations(model: str, lang: str):
                 return JsonTranslations({str(key): str(value) for key, value in catalog.items()})
         except (OSError, ValueError, TypeError):
             pass
+
+    # Large community catalogs can be split into multiple UTF-8 JSON files.
+    # This keeps the repository text-only while avoiding oversized individual
+    # files. Files are merged in lexical order; later shards override earlier
+    # values, which allows small correction shards to be added safely.
+    json_dir = os.path.join(translate_path, lang, 'LC_MESSAGES', model)
+    if os.path.isdir(json_dir):
+        merged_catalog: dict[str, str] = {}
+        try:
+            for file_name in sorted(os.listdir(json_dir)):
+                if not file_name.lower().endswith('.json'):
+                    continue
+                file_path = os.path.join(json_dir, file_name)
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    shard = json.load(file)
+                if isinstance(shard, dict):
+                    merged_catalog.update({str(key): str(value) for key, value in shard.items()})
+        except (OSError, ValueError, TypeError):
+            return None
+        if merged_catalog:
+            return JsonTranslations(merged_catalog)
 
     return None
 
